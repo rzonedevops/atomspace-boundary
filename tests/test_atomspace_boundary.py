@@ -43,11 +43,11 @@ def test_boundary_atom_hierarchy():
     # Test containment rules
     assert global_atom.can_contain("organization")
     assert not global_atom.can_contain("project")
-    assert not global_atom.can_contain("resource")
+    assert global_atom.can_contain("resource")  # Updated: global can now contain resources
     
     assert org.can_contain("project")
     assert not org.can_contain("organization")
-    assert not org.can_contain("resource")
+    assert org.can_contain("resource")  # Updated: org can now contain resources
     
     assert project.can_contain("resource")
     assert not project.can_contain("organization")
