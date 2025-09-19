@@ -70,46 +70,62 @@ class BoundaryAtom(ABC):
 
 class GlobalAtom(BoundaryAtom):
     """
-    Global (glo) atom that contains organization spaces.
-    Pattern: glo/ [ org?/** ]
+    Global (glo) atom that contains organization spaces and global resources.
+    Pattern: glo/ [ org?/** | res?/** ]
     """
     
     def __init__(self, name: str = "global"):
         super().__init__(name, "global")
     
     def can_contain(self, child_type: str) -> bool:
-        """Global atoms can only contain organization atoms"""
-        return child_type == "organization"
+        """Global atoms can contain organization atoms and resources"""
+        return child_type in ["organization", "resource"]
     
     def create_organization(self, name: str) -> 'OrganizationAtom':
         """Create a new organization within this global space"""
         return OrganizationAtom(name, parent=self)
     
+    def create_resource(self, name: str, resource_type: str = "generic") -> 'ResourceAtom':
+        """Create a new resource within this global space"""
+        return ResourceAtom(name, resource_type, parent=self)
+    
     def get_organizations(self) -> List['OrganizationAtom']:
         """Get all organization atoms in this global space"""
         return [child for child in self.children if isinstance(child, OrganizationAtom)]
+    
+    def get_resources(self) -> List['ResourceAtom']:
+        """Get all resource atoms in this global space"""
+        return [child for child in self.children if isinstance(child, ResourceAtom)]
 
 
 class OrganizationAtom(BoundaryAtom):
     """
-    Organization (org) atom that contains project spaces.
-    Pattern: org/ [ pro?/** ]
+    Organization (org) atom that contains project spaces and organization resources.
+    Pattern: org/ [ pro?/** | res?/** ]
     """
     
     def __init__(self, name: str, parent: Optional[GlobalAtom] = None):
         super().__init__(name, "organization", parent)
     
     def can_contain(self, child_type: str) -> bool:
-        """Organization atoms can only contain project atoms"""
-        return child_type == "project"
+        """Organization atoms can contain project atoms and resources"""
+        return child_type in ["project", "resource"]
     
     def create_project(self, name: str) -> 'ProjectAtom':
         """Create a new project within this organization space"""
         return ProjectAtom(name, parent=self)
     
+    def create_resource(self, name: str, resource_type: str = "generic") -> 'ResourceAtom':
+        """Create a new resource within this organization space"""
+        return ResourceAtom(name, resource_type, parent=self)
+    
     def get_projects(self) -> List['ProjectAtom']:
         """Get all project atoms in this organization space"""
         return [child for child in self.children if isinstance(child, ProjectAtom)]
+    
+    def get_resources(self) -> List['ResourceAtom']:
+        """Get all resource atoms in this organization space"""
+        return [child for child in self.children if isinstance(child, ResourceAtom)]
 
 
 class ProjectAtom(BoundaryAtom):
@@ -136,11 +152,11 @@ class ProjectAtom(BoundaryAtom):
 
 class ResourceAtom(BoundaryAtom):
     """
-    Resource (res) atom - leaf nodes in the Boundary domain model.
+    Resource (res) atom - can be at global, organization, or project level.
     These represent actual resources like hosts, services, etc.
     """
     
-    def __init__(self, name: str, resource_type: str = "generic", parent: Optional[ProjectAtom] = None):
+    def __init__(self, name: str, resource_type: str = "generic", parent: Optional[Union[GlobalAtom, OrganizationAtom, ProjectAtom]] = None):
         super().__init__(name, "resource", parent)
         self.resource_type = resource_type
     
@@ -187,7 +203,7 @@ class BoundaryAtomSpace:
     
     def create_project(self, org_name: str, project_name: str) -> Optional[ProjectAtom]:
         """Create a new project in the specified organization"""
-        org = self.get_atom_by_path(f"global/{org_name}")
+        org = self.get_atom_by_path(f"{self.global_atom.name}/{org_name}")
         if org and isinstance(org, OrganizationAtom):
             project = org.create_project(project_name)
             self.register_atom(project)
@@ -197,9 +213,24 @@ class BoundaryAtomSpace:
     def create_resource(self, org_name: str, project_name: str, resource_name: str, 
                        resource_type: str = "generic") -> Optional[ResourceAtom]:
         """Create a new resource in the specified project"""
-        project = self.get_atom_by_path(f"global/{org_name}/{project_name}")
+        project = self.get_atom_by_path(f"{self.global_atom.name}/{org_name}/{project_name}")
         if project and isinstance(project, ProjectAtom):
             resource = project.create_resource(resource_name, resource_type)
+            self.register_atom(resource)
+            return resource
+        return None
+    
+    def create_global_resource(self, resource_name: str, resource_type: str = "generic") -> ResourceAtom:
+        """Create a new resource at the global level"""
+        resource = self.global_atom.create_resource(resource_name, resource_type)
+        self.register_atom(resource)
+        return resource
+    
+    def create_org_resource(self, org_name: str, resource_name: str, resource_type: str = "generic") -> Optional[ResourceAtom]:
+        """Create a new resource at the organization level"""
+        org = self.get_atom_by_path(f"{self.global_atom.name}/{org_name}")
+        if org and isinstance(org, OrganizationAtom):
+            resource = org.create_resource(resource_name, resource_type)
             self.register_atom(resource)
             return resource
         return None
@@ -214,16 +245,27 @@ class BoundaryAtomSpace:
     
     def list_projects(self, org_name: str) -> List[ProjectAtom]:
         """List all projects in the specified organization"""
-        org = self.get_atom_by_path(f"global/{org_name}")
+        org = self.get_atom_by_path(f"{self.global_atom.name}/{org_name}")
         if org and isinstance(org, OrganizationAtom):
             return org.get_projects()
         return []
     
     def list_resources(self, org_name: str, project_name: str) -> List[ResourceAtom]:
         """List all resources in the specified project"""
-        project = self.get_atom_by_path(f"global/{org_name}/{project_name}")
+        project = self.get_atom_by_path(f"{self.global_atom.name}/{org_name}/{project_name}")
         if project and isinstance(project, ProjectAtom):
             return project.get_resources()
+        return []
+    
+    def list_global_resources(self) -> List[ResourceAtom]:
+        """List all resources at the global level"""
+        return self.global_atom.get_resources()
+    
+    def list_org_resources(self, org_name: str) -> List[ResourceAtom]:
+        """List all resources at the organization level"""
+        org = self.get_atom_by_path(f"{self.global_atom.name}/{org_name}")
+        if org and isinstance(org, OrganizationAtom):
+            return org.get_resources()
         return []
     
     def get_hierarchy_info(self) -> Dict[str, Any]:
@@ -231,15 +273,33 @@ class BoundaryAtomSpace:
         info = {
             "global": {
                 "name": self.global_atom.name,
+                "resources": [],
                 "organizations": []
             }
         }
         
+        # Add global level resources
+        for resource in self.global_atom.get_resources():
+            resource_info = {
+                "name": resource.name,
+                "type": resource.get_resource_type()
+            }
+            info["global"]["resources"].append(resource_info)
+        
         for org in self.global_atom.get_organizations():
             org_info = {
                 "name": org.name,
+                "resources": [],
                 "projects": []
             }
+            
+            # Add organization level resources
+            for resource in org.get_resources():
+                resource_info = {
+                    "name": resource.name,
+                    "type": resource.get_resource_type()
+                }
+                org_info["resources"].append(resource_info)
             
             for project in org.get_projects():
                 project_info = {
