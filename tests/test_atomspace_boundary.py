@@ -184,6 +184,49 @@ def test_attributes():
     print("✓ Attribute management tests passed")
 
 
+def test_multi_level_resources():
+    """Test resources at global, organization, and project levels"""
+    print("Testing multi-level resources...")
+    
+    atomspace = BoundaryAtomSpace()
+    
+    # Create global resources
+    global_res1 = atomspace.create_global_resource("global-dns", "service")
+    global_res2 = atomspace.create_global_resource("global-backup", "storage")
+    
+    assert global_res1 is not None
+    assert global_res2 is not None
+    assert len(atomspace.list_global_resources()) == 2
+    
+    # Create organization and org resources
+    org = atomspace.create_organization("test-org")
+    org_res1 = atomspace.create_org_resource("test-org", "org-network", "network")
+    org_res2 = atomspace.create_org_resource("test-org", "org-security", "service")
+    
+    assert org_res1 is not None
+    assert org_res2 is not None
+    assert len(atomspace.list_org_resources("test-org")) == 2
+    
+    # Create project and project resources
+    project = atomspace.create_project("test-org", "test-project")
+    proj_res = atomspace.create_resource("test-org", "test-project", "web-server", "host")
+    
+    assert proj_res is not None
+    assert len(atomspace.list_resources("test-org", "test-project")) == 1
+    
+    # Test path hierarchies
+    assert global_res1.get_path() == "global/global-dns"
+    assert org_res1.get_path() == "global/test-org/org-network"
+    assert proj_res.get_path() == "global/test-org/test-project/web-server"
+    
+    # Test containment rules
+    assert atomspace.global_atom.can_contain("resource")
+    assert org.can_contain("resource")
+    assert project.can_contain("resource")
+    
+    print("✓ Multi-level resource tests passed")
+
+
 def run_all_tests():
     """Run all tests"""
     print("=== Running AtomSpace-Boundary Tests ===\n")
@@ -192,6 +235,7 @@ def run_all_tests():
     test_boundary_atomspace()
     test_federation_patterns()
     test_attributes()
+    test_multi_level_resources()
     
     print("\n=== All Tests Passed! ===")
 
